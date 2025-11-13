@@ -14,6 +14,30 @@ import (
 	"syscall"
 )
 
+var (
+	crf       int
+	preset    int
+	maxHeight int
+)
+
+var (
+	inputDir string
+	doneDir  string
+	outDir   string
+	tempDir  string
+)
+
+func init() {
+	flag.IntVar(&crf, "crf", 32, "CRF value passed to SVT-AV1")
+	flag.IntVar(&preset, "preset", 4, "Preset value passed to SVT-AV1")
+	flag.IntVar(&maxHeight, "maxheight", 1440, "Maximum height of output video")
+
+	flag.StringVar(&inputDir, "dir", "./", "Directory that will be used to scan for videos")
+	flag.StringVar(&doneDir, "processeddir", "./_processed", "Directory where processed files will be moved")
+	flag.StringVar(&outDir, "outdir", "./_out", "Directory where processed files go to")
+	flag.StringVar(&tempDir, "tempdir", "./_temp", "Directory where currently processed file output will be stored")
+}
+
 func makeDirs(paths ...string) {
 	for _, path := range paths {
 		err := os.MkdirAll(path, 0755)
@@ -107,20 +131,10 @@ func inputFiles(inputDir string) []string {
 }
 
 func main() {
-	crf := *flag.Int("crf", 32, "CRF value passed to SVT-AV1")
-	preset := *flag.Int("preset", 4, "Preset value passed to SVT-AV1")
-	maxHeight := *flag.Int("maxheight", 1440, "Maximum height of output video")
-
-	inputDir := *flag.String("dir", "./", "Directory that will be used to scan for videos")
-	doneDir := *flag.String("donedir", "./_processed", "Directory where processed files will be moved")
-	outDir := *flag.String("outdir", "./_out", "Directory where processed files go to")
-	tempDir := *flag.String("tempdir", "./_temp", "Directory where currently processed file output will be stored")
-
+	flag.Parse()
 	makeDirs(doneDir, outDir, tempDir)
 
-	inputs := inputFiles(inputDir)
-
-	for _, path := range inputs {
+	for _, path := range inputFiles(inputDir) {
 		var displayHeight int
 
 		srcRes, err := ffprobeResolution(path)
