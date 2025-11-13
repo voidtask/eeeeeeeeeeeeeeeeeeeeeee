@@ -148,10 +148,10 @@ func main() {
 	flag.Parse()
 	makeDirs(doneDir, outDir, tempDir)
 
-	for _, path := range inputFiles(inputDir) {
+	for _, inpPath := range inputFiles(inputDir) {
 		var displayHeight int
 
-		srcRes, err := ffprobeResolution(path)
+		srcRes, err := ffprobeResolution(inpPath)
 
 		switch {
 		case err != nil && !noMaxHeight:
@@ -164,10 +164,10 @@ func main() {
 			displayHeight = -1
 		}
 
-		srcBase := filepath.Base(path)
-		srcExt := filepath.Ext(path)
+		inpBase := filepath.Base(inpPath)
+		inpExt := filepath.Ext(inpPath)
 
-		newBase := strings.TrimSuffix(srcBase, srcExt)
+		newBase := strings.TrimSuffix(inpBase, inpExt)
 		if !noMaxHeight {
 			newBase += fmt.Sprintf(" (%dp)", displayHeight)
 		}
@@ -175,7 +175,30 @@ func main() {
 
 		tempPath := filepath.Join(tempDir, newBase)
 
-		ffmpegProcess(path, tempPath)
+		ffmpegProcess(inpPath, tempPath)
+
+		tempPathAbs, err := filepath.Abs(tempPath)
+		if err != nil {
+			continue
+		}
+
+		outPathAbs, err := filepath.Abs(filepath.Join(outDir, newBase))
+		if err != nil {
+			continue
+		}
+
+		if err := os.Rename(tempPathAbs, outPathAbs); err != nil {
+			continue
+		}
+
+		donePathAbs, err := filepath.Abs(filepath.Join(doneDir, inpBase))
+		if err != nil {
+			continue
+		}
+
+		if err := os.Rename(inpPath, donePathAbs); err != nil {
+			continue
+		}
 	}
 
 	fmt.Println("\n[AV1] Done!")
