@@ -1,20 +1,26 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 )
+
+var MAX_THREADS int = countCPUs()
 
 var (
 	crf          int
@@ -22,6 +28,7 @@ var (
 	maxHeight    int
 	noMaxHeight  bool
 	svtAv1Params string
+	threads      int
 )
 
 var (
@@ -38,12 +45,49 @@ func init() {
 	flag.IntVar(&maxHeight, "maxheight", 1440, "Maximum height of output video")
 	flag.BoolVar(&noMaxHeight, "nomaxheight", false, "Disalbes maximum height filter, -maxheight flag will be ignored if set to true")
 	flag.StringVar(&svtAv1Params, "svtav1-params", "keyint=10s:fast-decode=2", "SVT-AV1 params passed to ffmpeg command")
+	flag.IntVar(&threads, "threads", int(math.Trunc(0.70*float64(MAX_THREADS))), "Number of logical CPU cores passed to taskset")
 
 	flag.StringVar(&inputPattern, "pattern", "*.mp4", "Input video files pattern")
 	flag.StringVar(&inputDir, "dir", "./", "Directory that will be used to scan for videos")
 	flag.StringVar(&doneDir, "processeddir", "./_processed", "Directory where processed files will be moved")
 	flag.StringVar(&outDir, "outdir", "./_out", "Directory where processed files go to")
 	flag.StringVar(&tempDir, "tempdir", "./_temp", "Directory where currently processed file output will be stored")
+}
+
+func countCPUs() int {
+	if runtime.GOOS != "linux" {
+		return runtime.NumCPU()
+	}
+
+	file, err := os.Open("/proc/stat")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	if !scanner.Scan() {
+		panic("failure during scanning of /proc/stat")
+	}
+
+	var count int
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "cpu") && unicode.IsDigit(rune(line[3])) {
+			count++
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		panic(err)
+	}
+
+	return count
+}
+
+func getThreads() int {
+	return min(MAX_THREADS, threads)
 }
 
 func makeDirs(paths ...string) {
@@ -82,8 +126,7 @@ func ffprobeResolution(path string) ([]int, error) {
 
 func ffmpegProcess(input string, output string) {
 	args := []string{
-		"-c",
-		"0-7",
+		"-c", fmt.Sprintf("0-%d", getThreads()-1),
 		"ffmpeg",
 		"-y",
 		"-i", input,
